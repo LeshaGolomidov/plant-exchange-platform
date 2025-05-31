@@ -1,93 +1,121 @@
 require('dotenv').config(); // Для загрузки переменных из .env файла
-// server.js - НОВАЯ ВЕРСИЯ ПОСЛЕ УДАЛЕНИЯ СТАРОГО
+// server.js - Версия для работы с IO API (intelligence.io.solutions)
 const express = require('express');
-const path = require('path'); // path нужен для res.sendFile
-const https = require('https'); // Added for OpenAI API calls
+const path = require('path');
+const https = require('https'); // Для HTTPS запросов (можно заменить на node-fetch или axios для удобства, но оставим пока так для минимальных изменений)
 const app = express();
 
-// Подключение к БД
-const dbClient = require('./config/db');
+// Подключение к БД (если используется)
+const dbClient = require('./config/db'); 
 
-// OpenAI API Key - Снова читается из переменных окружения
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+// Ключи и базовый URL для IO API из .env файла
+const IO_API_KEY = process.env.IO_API_KEY;
+const IO_API_BASE = process.env.IO_API_BASE;
 
-// Маршруты API
+// Маршруты API (если используются, например, для растений)
 const plantRoutes = require('./routes/plantRoutes');
-// const itemsRoutes = require('./routes/itemsRoutes'); // Если items не используются, можно удалить или оставить закомментированным
 
 app.use(express.json()); // Middleware для парсинга JSON тел запросов
+app.use('/api/plants', plantRoutes); // Пример подключения других маршрутов
 
-// Подключаем маршруты API
-app.use('/api/plants', plantRoutes);
-// app.use('/api/items', itemsRoutes); // Если items не используются
-
-// New API endpoint for OpenAI queries
+// API endpoint для IO API
 app.post('/api/ask-ai', async (req, res) => {
-    const { query, type } = req.body; // 'type' can be "flower" or "general"
+    const { query, type } = req.body; // 'type' может быть "flower" или "general"
 
-    if (!OPENAI_API_KEY) {
-        console.error(`[${new Date().toLocaleTimeString()}] /api/ask-ai: OPENAI_API_KEY is not set.`);
-        return res.status(500).json({ error: "OpenAI API key is not configured on the server." });
+    if (!IO_API_KEY || !IO_API_BASE) {
+        const errorMsg = `[${new Date().toLocaleTimeString()}] /api/ask-ai: IO_API_KEY или IO_API_BASE не установлены в .env`;
+        console.error(errorMsg);
+        return res.status(500).json({ error: "AI API ключи не сконфигурированы на сервере." });
     }
 
     if (!query) {
-        return res.status(400).json({ error: "Missing 'query' in request body" });
+        return res.status(400).json({ error: "Отсутствует 'query' в теле запроса" });
     }
 
-    let system_content = "Ты — эрудированный и увлекательный рассказчик.";
+    // Формирование системного промпта
+    let base_system_prompt = "Ты — эрудированный и увлекательный рассказчик.";
     if (type === "flower") {
-        system_content = "Ты — эксперт-глоссарий по цветам и растениям. Твоя задача — предоставлять интересную, подробную и точную информацию о различных цветах (растениях), их видах, истории, символизме, значении, особенностях ухода, интересных фактах и т.д. Если пользователь спрашивает о растении, у которого много видов (например, роза, тюльпан), уточни, какой именно вид его интересует, предложив несколько популярных вариантов, или попроси пользователя уточнить запрос. Отвечай подробно и увлекательно, как будто рассказываешь занимательную историю.";
+        base_system_prompt = "Ты — эксперт-глоссарий по цветам и растениям. Твоя задача — предоставлять интересную, подробную и точную информацию о различных цветах (растениях), их видах, истории, символизме, значении, особенностях ухода, интересных фактах и т.д. Если пользователь спрашивает о растении, у которого много видов (например, роза, тюльпан), уточни, какой именно вид его интересует, предложив несколько популярных вариантов, или попроси пользователя уточнить запрос.";
     }
+    const length_instruction = " Старайся давать краткие или средние по длине ответы, чтобы они легко помещались в одно-два сообщения или абзаца на веб-странице. Если тема обширная, лучше логически разбей информацию на несколько последовательных блоков, но каждый индивидуальный блок должен быть относительно коротким и законченным.";
+    const system_content = base_system_prompt + length_instruction;
 
-    const requestData = JSON.stringify({
-        model: "gpt-3.5-turbo",
+    const selected_model = "deepseek-ai/DeepSeek-R1-0528"; // Модель, как в Python-скрипте
+
+    const payload = {
+        model: selected_model,
         messages: [
             { role: "system", content: system_content },
             { role: "user", content: query }
         ]
-    });
+    };
+
+    const requestData = JSON.stringify(payload);
+    
+    // Разбираем IO_API_BASE на hostname и path
+    let apiUrlParsed;
+    try {
+        apiUrlParsed = new URL(IO_API_BASE + '/chat/completions'); // Добавляем эндпоинт
+    } catch (e) {
+        console.error(`[${new Date().toLocaleTimeString()}] /api/ask-ai: Неверный формат IO_API_BASE: ${IO_API_BASE}`);
+        return res.status(500).json({ error: "Ошибка конфигурации AI API URL на сервере." });
+    }
 
     const options = {
-        hostname: 'api.openai.com',
-        port: 443,
-        path: '/v1/chat/completions',
+        hostname: apiUrlParsed.hostname,
+        path: apiUrlParsed.pathname + apiUrlParsed.search, // Учитываем возможные query params в IO_API_BASE, хотя для /chat/completions их обычно нет
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${OPENAI_API_KEY}`,
+            'Authorization': `Bearer ${IO_API_KEY}`,
             'Content-Length': Buffer.byteLength(requestData)
         }
     };
 
     let responseData = '';
+    console.log(`[${new Date().toLocaleTimeString()}] /api/ask-ai: Отправка запроса на ${apiUrlParsed.href}`);
+    console.log(`[${new Date().toLocaleTimeString()}] /api/ask-ai: Заголовки: ${JSON.stringify(options.headers)}`);
+    console.log(`[${new Date().toLocaleTimeString()}] /api/ask-ai: Тело запроса: ${requestData}`);
+
     const apiReq = https.request(options, (apiRes) => {
         apiRes.on('data', (chunk) => {
             responseData += chunk;
         });
         apiRes.on('end', () => {
+            console.log(`[${new Date().toLocaleTimeString()}] /api/ask-ai: Получен ответ от API. Статус: ${apiRes.statusCode}`);
+            console.log(`[${new Date().toLocaleTimeString()}] /api/ask-ai: Тело ответа: ${responseData}`);
             try {
                 const parsedResponse = JSON.parse(responseData);
                 if (apiRes.statusCode >= 200 && apiRes.statusCode < 300) {
+                    let text_response = null;
                     if (parsedResponse.choices && parsedResponse.choices.length > 0 && parsedResponse.choices[0].message && parsedResponse.choices[0].message.content) {
-                        res.json({ response: parsedResponse.choices[0].message.content.trim() });
+                        text_response = parsedResponse.choices[0].message.content;
+                    } else if (parsedResponse.text) {
+                        text_response = parsedResponse.text;
+                    } else if (parsedResponse.completion) {
+                        text_response = parsedResponse.completion;
+                    } else if (parsedResponse.data && typeof parsedResponse.data === 'object' && parsedResponse.data.text) {
+                        text_response = parsedResponse.data.text;
+                    } else if (typeof parsedResponse.response === 'string') {
+                        text_response = parsedResponse.response;
                     } else {
-                        console.error(`[${new Date().toLocaleTimeString()}] /api/ask-ai: OpenAI response format error. Response: ${JSON.stringify(parsedResponse)}`);
-                        res.status(500).json({ error: "Unexpected response format from OpenAI." });
+                        text_response = `Не удалось извлечь текстовый ответ. Полный ответ: ${responseData}`;
                     }
+                    res.json({ response: text_response.trim() });
                 } else {
-                    console.error(`[${new Date().toLocaleTimeString()}] /api/ask-ai: OpenAI API Error (Status ${apiRes.statusCode}). Response: ${JSON.stringify(parsedResponse)}`);
-                    res.status(apiRes.statusCode).json({ error: `OpenAI API error: ${parsedResponse.error?.message || 'Unknown error'}` });
+                    console.error(`[${new Date().toLocaleTimeString()}] /api/ask-ai: Ошибка от IO API (Статус ${apiRes.statusCode}):`, parsedResponse);
+                    res.status(apiRes.statusCode).json({ error: `Ошибка от AI API: ${parsedResponse.detail || JSON.stringify(parsedResponse)}` });
                 }
             } catch (parseError) {
-                console.error(`[${new Date().toLocaleTimeString()}] /api/ask-ai: Error parsing OpenAI response. Error: ${String(parseError)}. Raw response: ${responseData}`);
-                res.status(500).json({ error: "Error processing OpenAI response." });
+                console.error(`[${new Date().toLocaleTimeString()}] /api/ask-ai: Ошибка парсинга ответа от IO API. Error: ${String(parseError)}. Raw response: ${responseData}`);
+                res.status(500).json({ error: "Ошибка обработки ответа от AI API." });
             }
         });
     });
 
     apiReq.on('error', (error) => {
-        console.error(`[${new Date().toLocaleTimeString()}] /api/ask-ai: Error making OpenAI request. Error: ${String(error)}`);
-        res.status(500).json({ error: "Failed to communicate with OpenAI." });
+        console.error(`[${new Date().toLocaleTimeString()}] /api/ask-ai: Ошибка при запросе к IO API. Error: ${String(error)}`);
+        res.status(500).json({ error: "Не удалось связаться с AI API." });
     });
 
     apiReq.write(requestData);
@@ -109,15 +137,20 @@ app.get('/', (req, res) => {
 
 console.log(`[${new Date().toLocaleTimeString()}] server.js: Конфигурация сервера завершена. Попытка запуска...`);
 
-const port = process.env.PORT || 3001
+const port = process.env.PORT || 3001;
 app.listen(port, () => {
     console.log(`[${new Date().toLocaleTimeString()}] Сервер УСПЕШНО запущен на http://localhost:${port}`);
     console.log(`[${new Date().toLocaleTimeString()}] Клиент (index.html) должен быть доступен по адресу: http://localhost:${port}/`);
+    if (IO_API_KEY && IO_API_BASE) {
+        console.log(`[${new Date().toLocaleTimeString()}] IO API Key и Base URL загружены из .env (или переменных окружения).`);
+    } else {
+        console.error(`[${new Date().toLocaleTimeString()}] ВНИМАНИЕ: IO_API_KEY или IO_API_BASE не найдены! Проверьте .env файл или переменные окружения.`);
+    }
+    // Проверка подключения к БД, если dbClient существует
     if (dbClient) {
-        // Сообщение об успешном подключении к БД уже выводится из config/db.js
-        // Можно добавить дополнительное подтверждение здесь, если нужно
         console.log(`[${new Date().toLocaleTimeString()}] Статус подключения к БД: клиент существует (вероятно, успешно).`);
     } else {
-        console.error(`[${new Date().toLocaleTimeString()}] КЛИЕНТ БД НЕ СУЩЕСТВУЕТ! Проверьте config/db.js.`);
+        // Это не обязательно ошибка, если БД не используется или dbClient не экспортируется
+        // console.warn(`[${new Date().toLocaleTimeString()}] Клиент БД (dbClient) не определен в server.js.`);
     }
 });

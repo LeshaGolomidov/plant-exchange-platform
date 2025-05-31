@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Платформа Обмена Растениями - Клиент</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; background-color: #eef0f2; color: #333; line-height: 1.6; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        h1, h2 { color: #2a3f54; text-align: center; margin-bottom: 30px; }
+        #plantsContainer { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 25px; margin-bottom: 40px; }
+        .plant-item { background-color: #fff; border: 1px solid #dce1e6; border-radius: 10px; padding: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.08); transition: transform 0.2s ease-in-out; }
+        .plant-item:hover { transform: translateY(-5px); }
+        .plant-item h3 { margin-top: 0; color: #3498db; font-size: 1.4em; margin-bottom: 10px;}
+        .plant-item p { margin: 5px 0; font-size: 0.95em; }
+        .plant-item strong { color: #555; }
+        .plant-item .meta-info { font-size: 0.85em; color: #777; margin-top: 10px; }
+        .actions button { background-color: #3498db; color: white; border: none; padding: 10px 15px; margin-top:15px; margin-right: 8px; border-radius: 5px; cursor: pointer; font-size: 0.9em; transition: background-color 0.2s; }
+        .actions button.update:hover { background-color: #2980b9; }
+        .actions button.delete { background-color: #e74c3c; }
+        .actions button.delete:hover { background-color: #c0392b; }
+        .form-section { background-color: #fff; padding: 25px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.08); margin-bottom: 40px; }
+        .form-section input[type="text"], .form-section input[type="number"], .form-section input[type="password"], .form-section textarea, .form-section select { width: calc(100% - 24px); padding: 12px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 5px; font-size: 1em; }
+        .form-section textarea { min-height: 80px; resize: vertical; }
+        .form-section button[type="submit"], .form-section button[type="button"] { background-color: #2ecc71; color: white; border: none; padding: 12px 25px; border-radius: 5px; cursor: pointer; font-size: 1.1em; transition: background-color 0.2s; }
+        .form-section button[type="submit"]:hover, .form-section button[type="button"]:hover { background-color: #27ae60; }
+        .form-section small { color: #7f8c8d; display: block; margin-top: -10px; margin-bottom: 10px; }
+        .filter-section { margin-bottom: 30px; padding: 15px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .filter-section input[type="text"] { padding: 10px; border: 1px solid #ccc; border-radius: 4px; margin-right: 10px; }
+        .filter-section button { padding: 10px 15px; background-color: #95a5a6; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .filter-section button:hover { background-color: #7f8c8d; }
+        .hidden { display: none; }
+        /* Стили для AI ассистента */
+        #aiAssistantSection { background-color: #f8f9fa; padding: 25px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.08); margin-bottom: 40px; }
+        #aiAssistantSection h2 { color: #17a2b8; }
+        #aiQuery { width: calc(100% - 24px); padding: 12px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 1em; }
+        #aiQueryType label { margin-right: 15px; font-size: 0.95em; }
+        #aiResponse { margin-top: 20px; padding: 15px; background-color: #e9ecef; border: 1px solid #ced4da; border-radius: 5px; min-height: 50px; white-space: pre-wrap; /* Для сохранения переносов строк */ }
+        #aiAssistantSection button { background-color: #17a2b8; }
+        #aiAssistantSection button:hover { background-color: #138496; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Платформа Обмена Растениями</h1>
+
+        <!-- Раздел AI Ассистента -->
+        <div id="aiAssistantSection" class="form-section">
+            <h2>AI Ассистент</h2>
+            <form id="aiAssistantForm">
+                <label for="aiQuery">Ваш вопрос:</label>
+                <textarea id="aiQuery" placeholder="Например, 'Расскажи о розах' или 'Какая сегодня погода?'" required></textarea>
+                
+                <div id="aiQueryType" style="margin-bottom: 15px;">
+                    <strong>Тип вопроса:</strong>
+                    <label><input type="radio" name="aiType" value="flower" checked> О цветке/растении</label>
+                    <label><input type="radio" name="aiType" value="general"> Общий вопрос</label>
+                </div>
+                
+                <button type="submit">Отправить AI</button>
+            </form>
+            <h3>Ответ AI:</h3>
+            <div id="aiResponse"><p>Здесь появится ответ от AI...</p></div>
+        </div>
+
+        <div class="filter-section">
+            <h2>Фильтр Растений</h2>
+            <input type="text" id="filterName" placeholder="Фильтр по названию...">
+            <input type="text" id="filterSpecies" placeholder="Фильтр по виду...">
+            <!-- Позже можно добавить фильтр по региону, если будет такое поле -->
+            <button onclick="applyFilters()">Применить Фильтры</button>
+            <button onclick="resetFilters()">Сбросить</button>
+        </div>
+
+        <h2>Доступные Растения</h2>
+        <div id="plantsContainer"><p>Загрузка растений...</p></div>
+
+        <div class="form-section">
+            <h2>Добавить Новое Растение</h2>
+            <form id="plantForm">
+                <label for="user_id">ID Пользователя (владельца):</label>
+                <input type="number" id="user_id" placeholder="ID существующего пользователя, например, 1" required>
+                <small>Убедитесь, что пользователь с таким ID существует в таблице 'users'.</small>
+                
+                <label for="name">Название Растения:</label>
+                <input type="text" id="name" placeholder="Например, Фикус Бенджамина" required>
+                
+                <label for="species">Вид Растения:</label>
+                <input type="text" id="species" placeholder="Например, Ficus benjamina">
+                
+                <label for="description">Описание:</label>
+                <textarea id="description" placeholder="Например, любит яркий рассеянный свет, умеренный полив"></textarea>
+                
+                <label for="image_url">URL Изображения (необязательно):</label>
+                <input type="text" id="image_url" placeholder="http://example.com/image.jpg">
+                
+                <button type="submit">Добавить Растение</button>
+            </form>
+        </div>
+
+        <!-- Скрытая форма для редактирования -->
+        <div id="editPlantSection" class="form-section hidden">
+            <h2>Редактировать Растение (ID: <span id="editPlantId"></span>)</h2>
+            <form id="editPlantForm">
+                <input type="hidden" id="edit_plant_id_hidden">
+                
+                <label for="edit_name">Название Растения:</label>
+                <input type="text" id="edit_name" required>
+                
+                <label for="edit_species">Вид Растения:</label>
+                <input type="text" id="edit_species">
+                
+                <label for="edit_description">Описание:</label>
+                <textarea id="edit_description"></textarea>
+                
+                <label for="edit_image_url">URL Изображения:</label>
+                <input type="text" id="edit_image_url">
+                
+                <button type="submit">Сохранить Изменения</button>
+                <button type="button" onclick="cancelEdit()">Отмена</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = '/api/plants'; // Используем относительный путь, если клиент и API на одном домене/порту
+        const plantsContainer = document.getElementById('plantsContainer');
+        const plantForm = document.getElementById('plantForm');
+        
+        const editPlantSection = document.getElementById('editPlantSection');
+        const editPlantForm = document.getElementById('editPlantForm');
+        const editPlantIdSpan = document.getElementById('editPlantId');
+        const editPlantIdHidden = document.getElementById('edit_plant_id_hidden');
+
+        let allPlantsData = []; // Для хранения всех загруженных растений (для фильтрации)
+
+        // === AI Assistant Script ===
+        const aiAssistantForm = document.getElementById('aiAssistantForm');
+        const aiQueryInput = document.getElementById('aiQuery');
+        const aiResponseOutput = document.getElementById('aiResponse');
+
+        aiAssistantForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const query = aiQueryInput.value.trim();
+            const type = document.querySelector('input[name="aiType"]:checked').value;
+
+            if (!query) {
+                alert('Пожалуйста, введите ваш вопрос.');
+                return;
+            }
+
+            aiResponseOutput.innerHTML = '<p>Обработка запроса...</p>';
+
+            try {
+                const response = await fetch('/api/ask-ai', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ query, type }),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `Ошибка сервера: ${response.status}`);
+                }
+
+                const result = await response.json();
+                aiResponseOutput.textContent = result.response; // Используем textContent для безопасности и корректного отображения
+
+            } catch (error) {
+                console.error('Ошибка при запросе к AI:', error);
+                aiResponseOutput.textContent = `Ошибка: ${error.message}`;
+            }
+        });
+        // === End AI Assistant Script ===
+
+        async function fetchPlants(params = {}) {
+            let url = API_BASE_URL;
+            const queryParams = new URLSearchParams(params);
+            if (queryParams.toString()) {
+                url += '?' + queryParams.toString(); // На будущее, если API будет поддерживать query-параметры для фильтрации
+            }
+
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`Ошибка HTTP! Статус: ${response.status}`);
+                allPlantsData = await response.json();
+                renderPlants(allPlantsData);
+            } catch (error) {
+                console.error('Ошибка при загрузке растений:', error);
+                plantsContainer.innerHTML = '<p style="color: red;">Не удалось загрузить растения. Запущен ли API сервер? Проверьте консоль.</p>';
+            }
+        }
+        
+        function renderPlants(plantsToRender) {
+            plantsContainer.innerHTML = '';
+            if (plantsToRender.length === 0) {
+                plantsContainer.innerHTML = '<p>Нет доступных растений. Добавьте новое, используя форму ниже, или проверьте фильтры.</p>';
+                return;
+            }
+            plantsToRender.forEach(plant => {
+                const plantElement = document.createElement('div');
+                plantElement.className = 'plant-item';
+                plantElement.innerHTML = `
+                    <h3>${plant.name} (ID: ${plant.plant_id})</h3>
+                    <p><strong>Вид:</strong> ${plant.species || 'Не указан'}</p>
+                    <p><strong>Описание:</strong> ${plant.description || 'Нет описания'}</p>
+                    <div class="meta-info">
+                        <p>Владелец ID: ${plant.user_id}</p>
+                        <p>Добавлено: ${new Date(plant.added_at).toLocaleString('ru-RU')}</p>
+                        ${plant.image_url ? `<p><a href="${plant.image_url}" target="_blank" rel="noopener noreferrer">Изображение</a></p>` : '<p>Изображение: нет</p>'}
+                    </div>
+                    <div class="actions">
+                        <button class="update" onclick="showEditForm(${plant.plant_id})">Редактировать</button>
+                        <button class="delete" onclick="deletePlant(${plant.plant_id})">Удалить</button>
+                    </div>
+                `;
+                plantsContainer.appendChild(plantElement);
+            });
+        }
+
+        plantForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const plantData = {
+                user_id: parseInt(document.getElementById('user_id').value, 10),
+                name: document.getElementById('name').value,
+                species: document.getElementById('species').value,
+                description: document.getElementById('description').value,
+                image_url: document.getElementById('image_url').value,
+            };
+
+            if (isNaN(plantData.user_id)) {
+                alert('ID Пользователя должен быть числом.'); return;
+            }
+            if (!plantData.name.trim()) {
+                 alert('Название растения обязательно для заполнения.'); return;
+            }
+
+            try {
+                const response = await fetch(API_BASE_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(plantData)
+                });
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`Ошибка: ${errorData.message || response.statusText}`);
+                }
+                plantForm.reset();
+                fetchPlants();
+                alert('Растение успешно добавлено!');
+            } catch (error) {
+                console.error('Ошибка при добавлении растения:', error);
+                alert(`Не удалось добавить растение: ${error.message}`);
+            }
+        });
+        
+        function showEditForm(plantId) {
+            const plantToEdit = allPlantsData.find(p => p.plant_id === plantId);
+            if (!plantToEdit) {
+                alert('Растение для редактирования не найдено!'); return;
+            }
+            
+            editPlantIdSpan.textContent = plantToEdit.plant_id;
+            editPlantIdHidden.value = plantToEdit.plant_id;
+            document.getElementById('edit_name').value = plantToEdit.name;
+            document.getElementById('edit_species').value = plantToEdit.species || '';
+            document.getElementById('edit_description').value = plantToEdit.description || '';
+            document.getElementById('edit_image_url').value = plantToEdit.image_url || '';
+            
+            editPlantSection.classList.remove('hidden');
+            window.scrollTo({ top: editPlantSection.offsetTop - 20, behavior: 'smooth' });
+        }
+
+        function cancelEdit() {
+            editPlantSection.classList.add('hidden');
+            editPlantForm.reset();
+        }
+
+        editPlantForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const plantId = parseInt(editPlantIdHidden.value, 10);
+            const plantData = {
+                name: document.getElementById('edit_name').value,
+                species: document.getElementById('edit_species').value,
+                description: document.getElementById('edit_description').value,
+                image_url: document.getElementById('edit_image_url').value,
+            };
+
+            if (!plantData.name.trim()) {
+                 alert('Название растения обязательно для заполнения.'); return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/${plantId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(plantData)
+                });
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`Ошибка: ${errorData.message || response.statusText}`);
+                }
+                cancelEdit();
+                fetchPlants();
+                alert('Растение успешно обновлено!');
+            } catch (error) {
+                console.error('Ошибка при обновлении растения:', error);
+                alert(`Не удалось обновить растение: ${error.message}`);
+            }
+        });
+
+        async function deletePlant(plantId) {
+            if (confirm(`Вы уверены, что хотите удалить растение с ID ${plantId}?`)) {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/${plantId}`, { method: 'DELETE' });
+                    if (!response.ok && response.status !== 204) {
+                        const errorData = await response.json();
+                        throw new Error(`Ошибка: ${errorData.message || response.statusText}`);
+                    }
+                    fetchPlants();
+                    alert('Растение успешно удалено!');
+                } catch (error) {
+                    console.error('Ошибка при удалении растения:', error);
+                    alert(`Не удалось удалить растение: ${error.message}`);
+                }
+            }
+        }
+        
+        function applyFilters() {
+            const filterName = document.getElementById('filterName').value.toLowerCase();
+            const filterSpecies = document.getElementById('filterSpecies').value.toLowerCase();
+            
+            const filteredPlants = allPlantsData.filter(plant => {
+                const nameMatch = plant.name.toLowerCase().includes(filterName);
+                const speciesMatch = (plant.species || '').toLowerCase().includes(filterSpecies);
+                return nameMatch && speciesMatch;
+            });
+            renderPlants(filteredPlants);
+        }
+
+        function resetFilters() {
+            document.getElementById('filterName').value = '';
+            document.getElementById('filterSpecies').value = '';
+            renderPlants(allPlantsData);
+        }
+
+        fetchPlants(); // Загрузить растения при первой загрузке страницы
+    </script>
+</body>
+</html>
+
